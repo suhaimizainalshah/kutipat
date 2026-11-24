@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Kutipat">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ec5a40"/><stop offset="1" stop-color="#c8321f"/></linearGradient></defs>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#g)"/>
+  <rect x="24" y="22" width="80" height="17" rx="8.5" fill="#fff"/>
+  <rect x="20" y="46" width="88" height="19" rx="9.5" fill="#ffd166" stroke="#fff" stroke-width="2"/>
+  <rect x="24" y="73" width="80" height="17" rx="8.5" fill="#fbe0da"/>
+  <rect x="24" y="97" width="46" height="15" rx="7.5" fill="#f4b3a7"/>
+  <g stroke="#c8321f" stroke-width="3" stroke-linecap="round"><line x1="56" y1="26" x2="56" y2="35"/><line x1="56" y1="50" x2="56" y2="61"/><line x1="56" y1="77" x2="56" y2="86"/></g>
+</svg>
