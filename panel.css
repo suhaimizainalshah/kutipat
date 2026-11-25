@@ -77,3 +77,7 @@ details.more>summary::after{content:"▸";margin-left:auto;color:var(--muted)}de
 .sel .opts label{display:inline-flex;gap:5px;align-items:center;font-weight:600}.fld>span{font-weight:650}
 
 details.more p.hint{display:block}
+
+/* Save everything on this page */
+.card.all{border-width:2px}.allopt{display:flex;gap:8px;align-items:center;margin:8px 0 2px;font-size:13px}
+.alllist{margin:8px 0 4px;padding-left:18px;font-size:13px;line-height:1.55}.alllist code{font-size:12px}

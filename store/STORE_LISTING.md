@@ -9,6 +9,7 @@
 ## Description
 Kutipat turns tables and lists on any web page into a spreadsheet, in a side panel that stays open while you browse.
 
+• Save everything on a page in two clicks: every table and list as a spreadsheet, plus the links, images, text and the page’s files, in one ZIP.
 • Finds the data for you: product listings, search results, directories, feeds and tables. Not the right data? Try another, or click one item and Kutipat finds the rest.
 • Clear columns: meaningful names and detected types (price, number, date, link, image, email). Rename columns or leave them out.
 • Many pages: follows Next buttons, presses Load more, or scrolls infinite feeds, with a polite wait and a page limit.

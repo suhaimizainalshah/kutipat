@@ -46,6 +46,14 @@
 </header>
 
 <main>
+  <section class="card all" id="sAll" aria-labelledby="hAll">
+    <h2 id="hAll">Save everything on this page</h2>
+    <p class="hint">Every table and list, the links, images and text, and the page’s files, in one ZIP. For more control, use the steps below.</p>
+    <div class="row"><button class="btn primary" id="allScan">Save everything</button><button class="btn primary" id="allZip" hidden>Download everything (ZIP)</button></div>
+    <label class="allopt"><input type="checkbox" id="allFiles" checked> Include the page’s files (images, media, styles, fonts)</label>
+    <div id="allList"></div>
+    <div class="prog" id="allProg" hidden><span></span></div><p class="msg" id="allMsg" role="status"></p>
+  </section>
   <section class="card" id="sFind" aria-labelledby="h1">
     <h2 id="h1"><span class="num">1</span>Find the data</h2>
     <div class="row"><button class="btn primary grow" id="find"><svg><use href="#i-find"/></svg>Find data on this page</button><button class="btn icon" id="pick" title="Pick by clicking: click one item on the page, and Kutipat finds the rest" aria-label="Pick by clicking"><svg><use href="#i-pick"/></svg></button></div>

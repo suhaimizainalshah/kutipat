@@ -101,6 +101,17 @@ Pick any element to get six selectors, each with how many elements it matches: a
 - **Export** the rows as Excel, CSV or JSON, with a warning when they look like personal data.
 - **Web Scraper sitemaps** can be imported, and exported sitemaps open in Web Scraper too. Its click and scroll selectors become plain element selectors.
 
+## Save everything on this page
+The first card in the panel. **Save everything** looks at the page and lists what it found; **Download everything (ZIP)** saves it all:
+- `data.xlsx`: every table and list Kutipat finds, one sheet each (numbers stay numbers), and the same tables as CSV files in `tables/`
+- `links.csv` (text and address of every link), `images.csv` (address, alt text and size of every image) and `page.md` (the page's text)
+- `files/`: the page's images, media, styles and fonts, sorted into folders, with `files/resources.csv` saying where each came from
+- `about.txt`: the address, the date, and what is in the ZIP
+
+It takes two clicks because Chrome only lets Kutipat ask for the other sites the files come from straight after a click, and Kutipat
+can only know which sites once it has looked. Untick **Include the page's files** to save everything else without asking. Scripts are
+left out (they are the page's code, not its content); the resources section below can save them. Everything is made in your browser.
+
 ## Save the page’s resources
 Finds the files the page loaded (images, media, styles, scripts, fonts and documents), lets you choose which kinds to save, and downloads them in one ZIP, sorted into folders, with `resources.csv` listing where each came from. Data requests the page made are left out. Up to 400 files or 250 MB. Check that you may reuse what you download.
 

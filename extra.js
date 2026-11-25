@@ -124,23 +124,94 @@ let RES = null;
 $("#resFind").onclick = () => guard($("#resMsg"), async () => { RES = await tool("resources"); const by = {}; RES.list.forEach(x => (by[x.type] ||= []).push(x));
   $("#resList").innerHTML = RES.list.length ? `<div class="rtypes">${Object.entries(by).sort((a, b) => b[1].length - a[1].length).map(([t, l]) => `<label><input type="checkbox" data-t="${t}" ${["scripts", "other"].includes(t) ? "" : "checked"}> ${t[0].toUpperCase() + t.slice(1)} (${l.length})</label>`).join("")}</div>` : "";
   $("#resZip").disabled = !RES.list.length; setMsg($("#resMsg"), RES.list.length ? `Found ${RES.list.length} files. Choose the kinds to save.` : "No files found on this page.", RES.list.length ? "ok" : "warn"); });
-$("#resZip").onclick = async () => {
-  const types = [...document.querySelectorAll("#resList [data-t]:checked")].map(c => c.dataset.t), pick = RES.list.filter(x => types.includes(x.type)).slice(0, 400), msg = $("#resMsg"); if (!pick.length) return setMsg(msg, "Choose at least one kind of file.", "warn");
-  const origins = [...new Set(pick.filter(x => !x.url.startsWith("data:")).map(x => new URL(x.url).origin + "/*"))];
-  if (origins.length && !(await chrome.permissions.request({ origins }))) return setMsg(msg, "Kutipat needs permission for the sites these files come from.", "warn");
-  $("#resZip").disabled = true; const entries = [], index = [["file", "type", "from", "size (bytes)", "status"]], names = new Set(); let total = 0, done = 0, failed = 0;
-  for (const x of pick) {
+// Downloads files into ZIP entries under prefix/<type>/, with an index of where each came from. Shared by "Download as ZIP" and
+// "Save everything on this page". Cookies are never sent; at most 400 files and 250 MB.
+async function fetchFiles(pick, progSel, msg, prefix = "") {
+  const entries = [], index = [["file", "type", "from", "size (bytes)", "status"]], names = new Set(); let total = 0, done = 0, failed = 0;
+  for (const x of pick.slice(0, 400)) {
     let name = (() => { try { const u = new URL(x.url); return decodeURIComponent(u.pathname.split("/").pop() || "index") || "file"; } catch { return "file"; } })().replace(/[^\w.\-]+/g, "_").slice(-80);
     if (x.url.startsWith("data:")) name = `inline-${done + 1}.${(x.url.match(/^data:\w+\/([\w+]+)/) || [, "bin"])[1].replace("svg+xml", "svg").replace("jpeg", "jpg")}`;
     for (let n = 2, base = name; names.has(x.type + "/" + name); n++) name = base.replace(/(\.\w+)?$/, `-${n}$1`); names.add(x.type + "/" + name);
     try { const r = await fetch(x.url, { credentials: "omit" }); if (!r.ok) throw new Error(r.status); const b = new Uint8Array(await r.arrayBuffer()); total += b.length;
-      if (total > 250 * 1024 * 1024) { index.push([name, x.type, x.url, "", "skipped: 250 MB limit"]); break; } entries.push([`${x.type}/${name}`, b]); index.push([`${x.type}/${name}`, x.type, x.url, b.length, "saved"]); }
+      if (total > 250 * 1024 * 1024) { index.push([name, x.type, x.url, "", "skipped: 250 MB limit"]); break; } entries.push([`${prefix}${x.type}/${name}`, b]); index.push([`${prefix}${x.type}/${name}`, x.type, x.url, b.length, "saved"]); }
     catch (e) { failed++; index.push([name, x.type, x.url, "", "couldn’t download (" + e.message + ")"]); }
-    prog("#resProg", ++done / pick.length); setMsg(msg, `Downloading ${done} of ${pick.length}…`);
+    prog(progSel, ++done / Math.min(pick.length, 400)); setMsg(msg, `Downloading ${done} of ${Math.min(pick.length, 400)} files…`);
   }
-  entries.push(["resources.csv", "\ufeff" + index.map(r => r.map(csvCell).join(",")).join("\r\n")]);
+  return { entries, index, total, failed };
+}
+const csvOf = rows => "\ufeff" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+const originsOf = list => [...new Set(list.filter(x => !x.url.startsWith("data:")).map(x => { try { return new URL(x.url).origin + "/*"; } catch { return null; } }).filter(Boolean))];
+$("#resZip").onclick = async () => {
+  const types = [...document.querySelectorAll("#resList [data-t]:checked")].map(c => c.dataset.t), pick = RES.list.filter(x => types.includes(x.type)).slice(0, 400), msg = $("#resMsg"); if (!pick.length) return setMsg(msg, "Choose at least one kind of file.", "warn");
+  const origins = originsOf(pick);
+  if (origins.length && !(await chrome.permissions.request({ origins }))) return setMsg(msg, "Kutipat needs permission for the sites these files come from.", "warn");
+  $("#resZip").disabled = true;
+  const { entries, index, total, failed } = await fetchFiles(pick, "#resProg", msg);
+  entries.push(["resources.csv", csvOf(index)]);
   const host = (() => { try { return new URL(RES.page).hostname; } catch { return "page"; } })(); save(ZipLite(entries), `${host}-resources.zip`);
   rlog("Saved a page's resources", RES.page, { files: entries.length - 1, megabytes: +(total / 1048576).toFixed(2), failed, kinds: types.join(" ") });
   prog("#resProg"); $("#resZip").disabled = false; setMsg(msg, `Saved ${entries.length - 1} file${entries.length === 2 ? "" : "s"} (${(total / 1048576).toFixed(1)} MB)${failed ? `; ${failed} couldn’t be downloaded (listed in resources.csv)` : ""}.`, failed ? "warn" : "ok");
 };
+
+/* ---------- 4. everything on this page, in one ZIP ----------
+   One button finds every table and list, the links, images and text, and the page's files. A second click downloads, because
+   Chrome only lets Kutipat ask for the other sites' files straight after a click, and it can only know which sites once it has looked. */
+let ALL = null;
+const cellOf = v => { const t = String(v ?? "").trim(); if (/^-?\d{1,15}(\.\d+)?$/.test(t)) return Number(t); return /^[=+\-@]/.test(t) ? "'" + t : t; };
+$("#allScan").onclick = () => guard($("#allMsg"), async () => {
+  const msg = $("#allMsg"); $("#allZip").hidden = true; $("#allList").textContent = ""; ALL = null;
+  setMsg(msg, "Looking at the page…"); prog("#allProg", null);
+  try {
+    const cands = (await run("detect")) || [], tables = [];
+    for (const c of cands) { const d = await run("extract", c.i); if (d && d.rows && d.rows.length) tables.push({ kind: c.kind, cols: d.cols, rows: d.rows }); }
+    try { await run("clear"); } catch { /* nothing highlighted */ }
+    const page = await tool("pageSummary"), res = await tool("resources");
+    const files = res.list.filter(x => x.type !== "scripts");                // code, not content: left out (the resources section can save it)
+    const here = (() => { try { return new URL(page.url).origin; } catch { return ""; } })();
+    const sites = originsOf(files).filter(o => o !== here + "/*").length;
+    ALL = { tables, page, files, host: (() => { try { return new URL(page.url).hostname; } catch { return "page"; } })() };
+    const rows = tables.reduce((n, t) => n + t.rows.length, 0), paras = page.text ? page.text.split("\n\n").length : 0;
+    const li = (t) => `<li>${t}</li>`;
+    $("#allList").innerHTML = `<ul class="alllist">${[
+      li(tables.length ? `<b>${tables.length}</b> table${tables.length === 1 ? "" : "s"} and list${tables.length === 1 ? "" : "s"} (${rows} rows), in <code>data.xlsx</code> and as CSV files` : "No tables or lists found"),
+      li(`<b>${page.links.length}</b> links, in <code>links.csv</code>`), li(`<b>${page.images.length}</b> images listed, in <code>images.csv</code>`),
+      li(`The page’s text (${paras} paragraphs and headings), in <code>page.md</code>`),
+      li(`<b>${files.length}</b> files (images, media, styles, fonts)${sites ? `, from this site and ${sites} other${sites === 1 ? "" : "s"}` : ""}, in <code>files/</code>`)].join("")}</ul>`;
+    $("#allZip").hidden = false; $("#allZip").focus();
+    $("#allScan").textContent = "Look again"; $("#allScan").classList.remove("primary");     // the download is now clearly the next step
+    setMsg(msg, sites && $("#allFiles").checked ? `Ready. Chrome will ask once for the ${sites} other site${sites === 1 ? "" : "s"} the files come from.` : "Ready to download.", "ok");
+  } finally { prog("#allProg"); }
+});
+$("#allZip").onclick = async () => {
+  if (!ALL) return; const msg = $("#allMsg"), withFiles = $("#allFiles").checked, pick = withFiles ? ALL.files : [];
+  const origins = originsOf(pick);
+  if (origins.length && !(await chrome.permissions.request({ origins }))) return setMsg(msg, "Kutipat needs permission for the sites the files come from. Untick “Include the page’s files” to save everything else.", "warn");
+  $("#allZip").disabled = true;
+  try {
+    const entries = [], { tables, page } = ALL;
+    if (tables.length) {
+      const sheets = tables.map((t, k) => ({ name: `${t.kind === "table" ? "Table" : "List"} ${k + 1}`, headers: t.cols.map(c => c.name), rows: t.rows.map(r => t.cols.map(c => cellOf(r[c.key]))) }));
+      entries.push(["data.xlsx", new Uint8Array(await XlsxLite.buildMany(sheets).arrayBuffer())]);
+      sheets.forEach((sh, k) => entries.push([`tables/${String(k + 1).padStart(2, "0")}-${sh.name.toLowerCase().replace(/\s+/g, "-")}.csv`, csvOf([sh.headers, ...sh.rows])]));
+    }
+    entries.push(["links.csv", csvOf([["text", "link"], ...page.links.map(l => [l.text, l.url])])]);
+    entries.push(["images.csv", csvOf([["image", "alt text", "width", "height"], ...page.images.map(i => [i.src, i.alt, i.width, i.height])])]);
+    const title = page.title || ALL.host, body = page.text.replace(new RegExp("^# " + title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\n\\n"), "");   // the page's own heading, if it repeats the title
+    entries.push(["page.md", `# ${title}\n\n<${page.url}>\n\n${page.description ? page.description + "\n\n" : ""}${body}\n`]);
+    let got = { entries: [], index: [], total: 0, failed: 0 };
+    if (pick.length) { got = await fetchFiles(pick, "#allProg", msg, "files/"); entries.push(...got.entries, ["files/resources.csv", csvOf(got.index)]); }
+    const when = new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
+    entries.push(["about.txt", [`Saved by Kutipat on ${when}`, `From: ${page.url}`, `Title: ${page.title || ""}`, "",
+      "In this ZIP:", tables.length ? `  data.xlsx and tables/: ${tables.length} tables and lists, one sheet or file each` : "  (no tables or lists were found)",
+      `  links.csv: ${page.links.length} links`, `  images.csv: ${page.images.length} images (addresses and alt text)`, "  page.md: the page's text",
+      pick.length ? `  files/: ${got.entries.length} files, with files/resources.csv saying where each came from${got.failed ? ` (${got.failed} couldn't be downloaded)` : ""}` : "  (the page's files were not included)",
+      "", "Scripts are left out: they are the page's code, not its content. The Save the page's resources section can save them.",
+      "Check that you may reuse what you saved: text, images, fonts and media usually belong to their creators.",
+      "Kutipat sends nothing anywhere: this ZIP was made in your browser."].join("\r\n")]);
+    save(ZipLite(entries), `${ALL.host}-everything.zip`);
+    rlog("Saved everything on a page", page.url, { tables: tables.length, links: page.links.length, images: page.images.length, files: got.entries.length, megabytes: +(got.total / 1048576).toFixed(2), failed: got.failed });
+    setMsg(msg, `Saved ${ALL.host}-everything.zip: ${tables.length} tables and lists, ${page.links.length} links, the page’s text${pick.length ? ` and ${got.entries.length} files` : ""}.${got.failed ? ` ${got.failed} file${got.failed === 1 ? "" : "s"} couldn’t be downloaded (listed in files/resources.csv).` : ""}`, got.failed ? "warn" : "ok");
+  } finally { prog("#allProg"); $("#allZip").disabled = false; }
+};
+
 })();

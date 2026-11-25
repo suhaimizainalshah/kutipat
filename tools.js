@@ -105,5 +105,23 @@ function resources() {
     const k = kind(p.name) || { img: "images", css: "styles", script: "scripts", video: "media", audio: "media", link: "other" }[p.initiatorType]; if (k) add(p.name, k, "loaded"); }
   return { page: location.href, title: document.title, list: [...out.values()] };
 }
-window.__kutipatTools = { pickEl, test, clear, selectorsFor, runSitemap, resources, all };
+// Everything readable on the page, for "Save everything on this page": links, images, and the text as simple Markdown.
+function pageSummary() {
+  const seen = new Set(), links = [];
+  document.querySelectorAll("a[href]").forEach(a => { const url = abs(a.getAttribute("href")); if (!url || /^(javascript|mailto|tel):/i.test(url)) return;
+    const text = txt(a).slice(0, 300), k = url + "\n" + text; if (seen.has(k)) return; seen.add(k); links.push({ text, url }); });
+  const images = [...document.images].map(i => ({ src: i.currentSrc || i.src, alt: (i.alt || "").trim(), width: i.naturalWidth || "", height: i.naturalHeight || "" }))
+    .filter(x => x.src && !x.src.startsWith("data:"));
+  const shown = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return (r.width || r.height) && cs.visibility !== "hidden" && cs.display !== "none"; };
+  const lines = []; let last = "";
+  document.body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,figcaption,dt,dd").forEach(e => {
+    if (e.closest("nav,footer,script,style,noscript,[aria-hidden=true]") || !shown(e)) return;
+    if (e.tagName === "P" && e.closest("li,blockquote")) return;                    // counted with its list item or quotation
+    const t = e.tagName === "PRE" ? e.innerText.trim() : txt(e); if (!t || t === last) return; last = t;
+    const tag = e.tagName; lines.push(/^H[1-6]$/.test(tag) ? "#".repeat(+tag[1]) + " " + t : tag === "LI" ? "- " + t : tag === "BLOCKQUOTE" ? "> " + t : tag === "PRE" ? "```\n" + t + "\n```" : t);
+  });
+  const desc = document.querySelector('meta[name="description"]')?.content || "";
+  return { title: document.title, url: location.href, description: desc, links, images, text: lines.join("\n\n") };
+}
+window.__kutipatTools = { pickEl, test, clear, selectorsFor, runSitemap, resources, all, pageSummary };
 })();
